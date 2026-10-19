@@ -15,28 +15,47 @@ Unlike generic calendar applications that only store dates, **Smart Study Planne
 
 ## 🛠️ Technology Stack
 
-- **Frontend:** HTML5, CSS3 (Modern Responsive UI), JavaScript (Vanilla ES6)
+- **Frontend:** HTML5, CSS3 (Modern Responsive UI), JavaScript (Vanilla ES6) *(Phase 5)*
 - **Backend:** Python with Flask & Flask-CORS
-- **Database:** SQLite (Lightweight, serverless)
-- **AI Engine:** Custom Rule-Based Inference Engine in Python (Forward & Backward Chaining)
+- **Database:** SQLite with foreign keys and parameterized SQL
+- **AI Engine:** Custom Rule-Based Inference Engine in Python (Forward & Backward Chaining) *(Phase 3)*
+- **Testing:** pytest automated test suite
 - **Version Control:** Git & GitHub
 
 ---
 
-## 🚀 Current Milestone: Phase 1 (Foundation Setup)
+## 🚀 Current Milestone: Phase 2 (SQLite Database & Persistence Complete)
 
-Phase 1 establishes the core backend environment and a health-check endpoint.
+Phase 2 introduces automated database management, schema constraints, student preferences, and full REST CRUD endpoints for academic subjects.
 
 ### 📁 Project Structure
 
 ```text
 Smart-Study-Planner/
 ├── backend/
-│   └── app.py              # Flask server entrypoint & API endpoints
-├── frontend/               # User interface (coming in later phases)
-├── .gitignore              # Files ignored by Git (venv, *.db, pycache)
-├── requirements.txt        # Python package dependencies
-└── README.md               # Project documentation & instructions
+│   ├── __init__.py                 # Backend package identifier
+│   ├── app.py                      # Flask server entrypoint & blueprint registration
+│   ├── database/
+│   │   ├── __init__.py             # Database exports
+│   │   ├── db.py                   # Reusable SQLite connection & helper methods
+│   │   └── schema.sql              # Clean SQLite table definitions & foreign keys
+│   ├── routes/
+│   │   ├── __init__.py             # Routes package exports
+│   │   ├── subjects_bp.py          # /api/subjects CRUD & sample seeder
+│   │   ├── preferences_bp.py       # /api/preferences endpoints
+│   │   └── validators.py           # Input validation for subjects and preferences
+│   └── tests/
+│       ├── __init__.py             # Tests package
+│       ├── test_health.py          # Health check endpoint tests
+│       ├── test_database.py        # Schema, foreign keys, & deduplication tests
+│       ├── test_subjects_crud.py   # Subject CRUD & validation rule tests
+│       └── test_preferences.py     # Study preferences tests
+├── frontend/                       # User interface (coming in Phase 5)
+├── instance/                       # SQLite database directory (auto-created, gitignored)
+│   └── planner.db                  # Local SQLite database file
+├── .gitignore                      # Files ignored by Git (venv, *.db, pycache)
+├── requirements.txt                # Python package dependencies
+└── README.md                       # Beginner-friendly documentation & testing guide
 ```
 
 ---
@@ -46,74 +65,114 @@ Smart-Study-Planner/
 Follow these exact steps to run the application on Windows:
 
 ### Step 1: Open PowerShell in the Project Directory
-Make sure your terminal is opened in `Smart-Study-Planner`:
 ```powershell
 cd C:\Users\Admin\Desktop\Smart-Study-Planner
 ```
 
-### Step 2: Create a Virtual Environment
-A virtual environment keeps the project libraries isolated from your global Python installation:
-```powershell
-python -m venv venv
-```
-
-### Step 3: Activate the Virtual Environment
-Activate the environment in your PowerShell window:
+### Step 2: Activate the Virtual Environment
 ```powershell
 .\venv\Scripts\Activate.ps1
 ```
-> **Note:** If Windows blocks script execution with an error like `cannot be loaded because running scripts is disabled`, run this one-time command in PowerShell and try activating again:
-> ```powershell
-> Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-> .\venv\Scripts\Activate.ps1
-> ```
-*(You will see `(venv)` appear at the start of your terminal line when active).*
+*(If you see an execution policy error, run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` and then run the activate command again).*
 
-### Step 4: Install Dependencies
-Install Flask and testing tools:
+### Step 3: Install Dependencies (if not already installed)
 ```powershell
 pip install -r requirements.txt
 ```
+
+### Step 4: Run the Automated Pytest Suite
+Run the 18 automated unit and integration tests to verify database initialization, validation, and API routes:
+```powershell
+python -m pytest -v
+```
+*(All 18 tests will pass with green checkmarks).*
 
 ### Step 5: Start the Flask Backend Server
 ```powershell
 python backend\app.py
 ```
-You will see output indicating that the Flask server is running at:
+The server will automatically initialize `instance/planner.db` and listen at:
 `http://127.0.0.1:5000`
 
 ---
 
-## 🧪 Testing the Health-Check Endpoint
+## 🧪 Testing the API Endpoints via PowerShell
 
-While the server is running, open your web browser or open a **new PowerShell window** and test the endpoints:
+With the server running in your first PowerShell window, open a **second PowerShell window** and test the endpoints:
 
-### In a Web Browser:
-- Visit: [http://127.0.0.1:5000/](http://127.0.0.1:5000/) — Home welcome route
-- Visit: [http://127.0.0.1:5000/api/health](http://127.0.0.1:5000/api/health) — Health check endpoint
-
-### In PowerShell:
+### 1. Health & Database Connectivity Check
 ```powershell
 Invoke-RestMethod http://127.0.0.1:5000/api/health
 ```
-
-**Expected JSON Response:**
+**Response:**
 ```json
 {
+  "database": "connected",
   "service": "Smart Study Planner AI Backend",
   "status": "healthy",
-  "timestamp": "2026-10-19T...",
   "uptime_status": "ok"
 }
+```
+
+### 2. Load Sample College Subjects (1-Click Seed)
+```powershell
+Invoke-RestMethod -Method Post http://127.0.0.1:5000/api/subjects/sample
+```
+Populates 5 standard college courses (*Data Structures, DBMS, OS, Networks, Web Dev*) with dynamic upcoming exam dates without creating duplicates.
+
+### 3. List All Enrolled Subjects (Enriched with Progress & Exam Countdown)
+```powershell
+Invoke-RestMethod http://127.0.0.1:5000/api/subjects
+```
+
+### 4. Create a New Subject (with Validation)
+```powershell
+$newSubject = @{
+    name = "Artificial Intelligence"
+    difficulty_level = "hard"
+    target_grade = "A"
+    exam_date = "2026-11-15"
+    syllabus_units_total = 5
+    units_completed = 1
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:5000/api/subjects -ContentType "application/json" -Body $newSubject
+```
+
+### 5. Update an Existing Subject Progress
+```powershell
+$updatePayload = @{ units_completed = 3 } | ConvertTo-Json
+Invoke-RestMethod -Method Put -Uri http://127.0.0.1:5000/api/subjects/1 -ContentType "application/json" -Body $updatePayload
+```
+
+### 6. Delete a Subject
+```powershell
+Invoke-RestMethod -Method Delete -Uri http://127.0.0.1:5000/api/subjects/5
+```
+
+### 7. View & Update Study Preferences (Hours & Fatigue)
+**View Preferences:**
+```powershell
+Invoke-RestMethod http://127.0.0.1:5000/api/preferences
+```
+**Update Preferences:**
+```powershell
+$prefs = @{
+    daily_available_hours = 5.0
+    fatigue_level = "high"
+    preferred_time_of_day = "morning"
+    focus_span_minutes = 30
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Put -Uri http://127.0.0.1:5000/api/preferences -ContentType "application/json" -Body $prefs
 ```
 
 ---
 
 ## 🗺️ Next Roadmap Phases
 
-- **Phase 2:** SQLite Database Setup (`schema.sql` and `db.py`)
-- **Phase 3:** Custom Rule-Based AI Engine (Working Memory, Rules, Forward & Backward Chaining)
-- **Phase 4:** REST API Routes (Subjects, Daily Preferences, Schedule Generation)
-- **Phase 5:** Interactive Student Dashboard UI
-- **Phase 6:** Automated Unit Tests & Error Handling
-- **Phase 7:** Cloud Deployment & College Presentation / Viva Prep
+- **Phase 3:** Custom Rule-Based AI Engine (Working Memory, Fact Base, Forward & Backward Chaining Inference)
+- **Phase 4:** REST API Routes for AI Reasoning (`/api/ai/generate-plan` & `/api/ai/check-goal`)
+- **Phase 5:** Interactive Student Dashboard UI (HTML, CSS, JavaScript)
+- **Phase 6:** End-to-End Testing & Boundary Conditions
+- **Phase 7:** Cloud Deployment & College Presentation / Viva Defense Preparation

@@ -29,4 +29,5 @@ def test_health_check_endpoint(client):
     data = response.get_json()
     assert data["status"] == "healthy"
     assert data["uptime_status"] == "ok"
+    assert data["database"] == "connected"
     assert "timestamp" in data
