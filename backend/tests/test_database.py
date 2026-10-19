@@ -1,78 +1,85 @@
 """
-Unit tests for SQLite Database initialization, foreign keys, and default records.
+Unit tests for SQLite Database initialization, foreign keys, and default records using unittest.TestCase
 """
 
+import os
+import sys
 import tempfile
+import unittest
 from pathlib import Path
-import pytest
+
+TESTS_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = TESTS_DIR.parent.parent
+for p in (str(PROJECT_ROOT), str(TESTS_DIR.parent)):
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
 try:
     from backend.database.db import init_db, get_db_connection, load_sample_subjects
 except ImportError:
     from database.db import init_db, get_db_connection, load_sample_subjects
 
 
-@pytest.fixture
-def temp_db():
-    """Provides a temporary SQLite database file for testing."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        temp_path = Path(f.name)
-    yield temp_path
-    if temp_path.exists():
-        temp_path.unlink()
+class DatabaseInitializationTestCase(unittest.TestCase):
+    """Tests SQLite database tables, constraints, and seeding."""
+
+    def setUp(self):
+        self.db_fd, self.db_path = tempfile.mkstemp(suffix=".db")
+        init_db(db_path=self.db_path)
+
+    def tearDown(self):
+        os.close(self.db_fd)
+        if os.path.exists(self.db_path):
+            os.remove(self.db_path)
+
+    def test_database_initialization(self):
+        """Verify that all core tables and default preferences are created."""
+        conn = get_db_connection(db_path=self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = {row["name"] for row in cursor.fetchall()}
+        conn.close()
+
+        expected = {"subjects", "study_preferences", "study_plans", "plan_items", "rule_logs"}
+        self.assertTrue(expected.issubset(tables))
+
+    def test_default_preferences_seeded(self):
+        """Verify that default preferences row is inserted upon initialization."""
+        conn = get_db_connection(db_path=self.db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM study_preferences")
+        pref = cursor.fetchone()
+        conn.close()
+
+        self.assertIsNotNone(pref)
+        self.assertEqual(pref["daily_available_hours"], 4.0)
+        self.assertEqual(pref["fatigue_level"], "medium")
+        self.assertEqual(pref["preferred_time_of_day"], "morning")
+        self.assertEqual(pref["focus_span_minutes"], 45)
+
+    def test_foreign_key_enforcement(self):
+        """Verify that foreign keys prevent orphan plan_items."""
+        conn = get_db_connection(db_path=self.db_path)
+        cursor = conn.cursor()
+        with self.assertRaises(Exception):
+            cursor.execute(
+                """
+                INSERT INTO plan_items (plan_id, subject_id, session_title, allocated_minutes)
+                VALUES (999, 999, 'Invalid Session', 45)
+                """
+            )
+        conn.close()
+
+    def test_load_sample_subjects_deduplication(self):
+        """Verify sample subjects load without creating duplicates."""
+        first_load = load_sample_subjects(db_path=self.db_path)
+        self.assertGreater(first_load["added_count"], 0)
+        self.assertEqual(first_load["skipped_count"], 0)
+
+        second_load = load_sample_subjects(db_path=self.db_path)
+        self.assertEqual(second_load["added_count"], 0)
+        self.assertEqual(second_load["skipped_count"], first_load["added_count"])
 
 
-def test_database_initialization(temp_db):
-    """Test that all tables and default preferences are created on init_db."""
-    init_db(db_path=temp_db)
-
-    conn = get_db_connection(db_path=temp_db)
-    cursor = conn.cursor()
-
-    # Verify tables exist
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-    tables = {row["name"] for row in cursor.fetchall()}
-
-    expected_tables = {"subjects", "study_preferences", "study_plans", "plan_items", "rule_logs"}
-    assert expected_tables.issubset(tables)
-
-    # Verify default study preferences seeded
-    cursor.execute("SELECT * FROM study_preferences")
-    pref = cursor.fetchone()
-    assert pref is not None
-    assert pref["daily_available_hours"] == 4.0
-    assert pref["fatigue_level"] == "medium"
-    assert pref["preferred_time_of_day"] == "morning"
-    assert pref["focus_span_minutes"] == 45
-    conn.close()
-
-
-def test_foreign_key_enforcement(temp_db):
-    """Test that foreign key constraint prevents orphan plan_items."""
-    init_db(db_path=temp_db)
-    conn = get_db_connection(db_path=temp_db)
-    cursor = conn.cursor()
-
-    # Attempt inserting a plan_item referencing non-existent plan_id and subject_id
-    with pytest.raises(Exception):
-        cursor.execute(
-            """
-            INSERT INTO plan_items (plan_id, subject_id, session_title, allocated_minutes)
-            VALUES (999, 999, 'Invalid Session', 45)
-            """
-        )
-    conn.close()
-
-
-def test_load_sample_subjects_deduplication(temp_db):
-    """Test that loading sample subjects does not create duplicate entries."""
-    init_db(db_path=temp_db)
-
-    # First load
-    first_res = load_sample_subjects(db_path=temp_db)
-    assert first_res["added_count"] > 0
-    assert first_res["skipped_count"] == 0
-
-    # Second load - all should be skipped
-    second_res = load_sample_subjects(db_path=temp_db)
-    assert second_res["added_count"] == 0
-    assert second_res["skipped_count"] == first_res["added_count"]
+if __name__ == "__main__":
+    unittest.main()

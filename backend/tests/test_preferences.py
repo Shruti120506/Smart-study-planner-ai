@@ -1,70 +1,80 @@
 """
-Integration tests for Student Preferences endpoints and validation.
+Integration tests for student study preferences using unittest.TestCase
 """
 
+import os
+import sys
 import tempfile
+import unittest
 from pathlib import Path
-import pytest
+
+TESTS_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = TESTS_DIR.parent.parent
+for p in (str(PROJECT_ROOT), str(TESTS_DIR.parent)):
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
 try:
     from backend.app import create_app
 except ImportError:
     from app import create_app
 
 
-@pytest.fixture
-def test_client():
-    """Configures a fresh Flask test client with an isolated temporary SQLite database."""
-    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-        temp_db_path = Path(f.name)
+class PreferencesTestCase(unittest.TestCase):
+    """Test suite for /api/preferences endpoints."""
 
-    app = create_app({"TESTING": True, "DATABASE": str(temp_db_path)})
-    with app.test_client() as client:
-        yield client
+    def setUp(self):
+        self.db_fd, self.db_path = tempfile.mkstemp(suffix=".db")
+        self.app = create_app({"TESTING": True, "DATABASE": self.db_path})
+        self.client = self.app.test_client()
 
-    if temp_db_path.exists():
-        temp_db_path.unlink()
+    def tearDown(self):
+        os.close(self.db_fd)
+        if os.path.exists(self.db_path):
+            os.remove(self.db_path)
+
+    def test_get_default_preferences(self):
+        """Test retrieving initial default preferences."""
+        response = self.client.get("/api/preferences")
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data["success"])
+        prefs = data["preferences"]
+        self.assertEqual(prefs["daily_available_hours"], 4.0)
+        self.assertEqual(prefs["fatigue_level"], "medium")
+        self.assertEqual(prefs["preferred_time_of_day"], "morning")
+        self.assertEqual(prefs["focus_span_minutes"], 45)
+
+    def test_update_preferences_success(self):
+        """Test updating preferences with valid payload."""
+        payload = {
+            "daily_available_hours": 6.5,
+            "fatigue_level": "high",
+            "preferred_time_of_day": "night",
+            "focus_span_minutes": 25
+        }
+        response = self.client.put("/api/preferences", json=payload)
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data["success"])
+        updated = data["preferences"]
+        self.assertEqual(updated["daily_available_hours"], 6.5)
+        self.assertEqual(updated["fatigue_level"], "high")
+        self.assertEqual(updated["preferred_time_of_day"], "night")
+        self.assertEqual(updated["focus_span_minutes"], 25)
+
+    def test_update_preferences_validation_errors(self):
+        """Test that invalid preference inputs are rejected."""
+        # Negative hours
+        res_neg = self.client.put("/api/preferences", json={"daily_available_hours": -2.0})
+        self.assertEqual(res_neg.status_code, 400)
+        self.assertTrue(any("between 0.5 and 16.0" in m for m in res_neg.get_json()["error"]["messages"]))
+
+        # Invalid fatigue level
+        res_fatigue = self.client.put("/api/preferences", json={"fatigue_level": "hyper_energetic"})
+        self.assertEqual(res_fatigue.status_code, 400)
+        self.assertTrue(any("must be 'low', 'medium', or 'high'" in m for m in res_fatigue.get_json()["error"]["messages"]))
 
 
-def test_get_default_preferences(test_client):
-    """Test retrieving initial default preferences."""
-    response = test_client.get("/api/preferences")
-    assert response.status_code == 200
-    data = response.get_json()
-    assert data["success"] is True
-    prefs = data["preferences"]
-    assert prefs["daily_available_hours"] == 4.0
-    assert prefs["fatigue_level"] == "medium"
-    assert prefs["preferred_time_of_day"] == "morning"
-    assert prefs["focus_span_minutes"] == 45
-
-
-def test_update_preferences_success(test_client):
-    """Test updating study preferences with valid values."""
-    payload = {
-        "daily_available_hours": 6.5,
-        "fatigue_level": "high",
-        "preferred_time_of_day": "night",
-        "focus_span_minutes": 25
-    }
-    response = test_client.put("/api/preferences", json=payload)
-    assert response.status_code == 200
-    data = response.get_json()
-    assert data["success"] is True
-    updated = data["preferences"]
-    assert updated["daily_available_hours"] == 6.5
-    assert updated["fatigue_level"] == "high"
-    assert updated["preferred_time_of_day"] == "night"
-    assert updated["focus_span_minutes"] == 25
-
-
-def test_update_preferences_validation_error(test_client):
-    """Test that invalid preference inputs are rejected."""
-    # Test negative hours
-    res_neg = test_client.put("/api/preferences", json={"daily_available_hours": -2.0})
-    assert res_neg.status_code == 400
-    assert any("between 0.5 and 16.0" in msg for msg in res_neg.get_json()["error"]["messages"])
-
-    # Test invalid fatigue level
-    res_fatigue = test_client.put("/api/preferences", json={"fatigue_level": "exhausted_beyond_belief"})
-    assert res_fatigue.status_code == 400
-    assert any("must be 'low', 'medium', or 'high'" in msg for msg in res_fatigue.get_json()["error"]["messages"])
+if __name__ == "__main__":
+    unittest.main()
