@@ -5,7 +5,10 @@ Unit tests for SQLite Database initialization, foreign keys, and default records
 import tempfile
 from pathlib import Path
 import pytest
-from backend.database.db import init_db, get_db_connection, load_sample_subjects
+try:
+    from backend.database.db import init_db, get_db_connection, load_sample_subjects
+except ImportError:
+    from database.db import init_db, get_db_connection, load_sample_subjects
 
 
 @pytest.fixture

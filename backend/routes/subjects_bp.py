@@ -5,8 +5,12 @@ Provides REST endpoints for Subject CRUD and sample data population.
 
 from datetime import datetime
 from flask import Blueprint, jsonify, request
-from backend.database.db import get_db_connection, load_sample_subjects
-from backend.routes.validators import validate_subject_payload
+try:
+    from backend.database.db import get_db_connection, load_sample_subjects
+    from backend.routes.validators import validate_subject_payload
+except ImportError:
+    from database.db import get_db_connection, load_sample_subjects
+    from routes.validators import validate_subject_payload
 
 subjects_bp = Blueprint("subjects", __name__, url_prefix="/api/subjects")
 

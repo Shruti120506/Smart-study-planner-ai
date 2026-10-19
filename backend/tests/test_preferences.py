@@ -5,7 +5,10 @@ Integration tests for Student Preferences endpoints and validation.
 import tempfile
 from pathlib import Path
 import pytest
-from backend.app import create_app
+try:
+    from backend.app import create_app
+except ImportError:
+    from app import create_app
 
 
 @pytest.fixture

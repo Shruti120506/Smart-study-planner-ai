@@ -1,23 +1,35 @@
 """
 Smart Study Planner AI - Flask Backend
 Phase 2: SQLite Database Initialization & REST API Endpoints
+Robust import configuration supporting execution from any directory.
 """
 
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Ensure project root is in sys.path so running `python backend/app.py` works out of the box
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+# Resolve directory paths
+BACKEND_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = BACKEND_DIR.parent
+
+# Add both PROJECT_ROOT and BACKEND_DIR to sys.path so imports work regardless of working directory
+for path_str in [str(PROJECT_ROOT), str(BACKEND_DIR)]:
+    if path_str not in sys.path:
+        sys.path.insert(0, path_str)
 
 from flask import Flask, jsonify
 from flask_cors import CORS
 
-from backend.database.db import init_db, close_db_connection, get_db_connection
-from backend.routes.subjects_bp import subjects_bp
-from backend.routes.preferences_bp import preferences_bp
+# Dual import support (works whether imported as backend.X or X)
+try:
+    from backend.database.db import init_db, close_db_connection, get_db_connection
+    from backend.routes.subjects_bp import subjects_bp
+    from backend.routes.preferences_bp import preferences_bp
+except ImportError:
+    from database.db import init_db, close_db_connection, get_db_connection
+    from routes.subjects_bp import subjects_bp
+    from routes.preferences_bp import preferences_bp
 
 
 def create_app(test_config=None):
@@ -27,7 +39,7 @@ def create_app(test_config=None):
     """
     app = Flask(__name__)
 
-    # Default configuration
+    # Default configuration: instance/planner.db in project root
     default_db = PROJECT_ROOT / "instance" / "planner.db"
     app.config.from_mapping(
         DATABASE=str(default_db),

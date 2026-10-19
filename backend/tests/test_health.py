@@ -2,7 +2,11 @@
 Basic sanity tests for Phase 1 endpoints
 """
 import pytest
-from backend.app import create_app
+
+try:
+    from backend.app import create_app
+except ImportError:
+    from app import create_app
 
 
 @pytest.fixture

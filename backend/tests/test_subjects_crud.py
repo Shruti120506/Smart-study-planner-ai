@@ -6,7 +6,10 @@ from datetime import datetime, timedelta
 import tempfile
 from pathlib import Path
 import pytest
-from backend.app import create_app
+try:
+    from backend.app import create_app
+except ImportError:
+    from app import create_app
 
 
 @pytest.fixture

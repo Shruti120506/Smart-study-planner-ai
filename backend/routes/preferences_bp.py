@@ -4,8 +4,12 @@ Provides endpoints to view and update daily study hours, fatigue, and focus span
 """
 
 from flask import Blueprint, jsonify, request
-from backend.database.db import get_db_connection
-from backend.routes.validators import validate_preferences_payload
+try:
+    from backend.database.db import get_db_connection
+    from backend.routes.validators import validate_preferences_payload
+except ImportError:
+    from database.db import get_db_connection
+    from routes.validators import validate_preferences_payload
 
 preferences_bp = Blueprint("preferences", __name__, url_prefix="/api/preferences")
 
