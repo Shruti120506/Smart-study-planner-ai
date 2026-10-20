@@ -1,46 +1,56 @@
 """
 Preferences Blueprint for Smart Study Planner AI
-Provides endpoints to view and update daily study hours, fatigue, and focus span.
+Provides endpoints to view and update daily study hours, fatigue, and focus span, scoped to active user.
 """
 
 from flask import Blueprint, jsonify, request
 try:
     from backend.database.db import get_db_connection
     from backend.routes.validators import validate_preferences_payload
+    from backend.auth.security import login_required_api, get_current_user_id
 except ImportError:
     from database.db import get_db_connection
     from routes.validators import validate_preferences_payload
+    from auth.security import login_required_api, get_current_user_id
 
 preferences_bp = Blueprint("preferences", __name__, url_prefix="/api/preferences")
 
 
-def get_or_create_preferences(conn):
-    """Fetches the latest student preferences record or inserts default values."""
+def get_or_create_preferences(conn, user_id=None):
+    """Fetches the student preferences record for user_id or inserts default values."""
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM study_preferences ORDER BY id DESC LIMIT 1")
+    if user_id is not None:
+        cursor.execute("SELECT * FROM study_preferences WHERE user_id = ? ORDER BY id DESC LIMIT 1", (user_id,))
+    else:
+        cursor.execute("SELECT * FROM study_preferences WHERE user_id IS NULL ORDER BY id DESC LIMIT 1")
     row = cursor.fetchone()
 
     if not row:
         cursor.execute(
             """
             INSERT INTO study_preferences 
-            (daily_available_hours, preferred_time_of_day, focus_span_minutes, fatigue_level)
-            VALUES (?, ?, ?, ?)
+            (user_id, daily_available_hours, preferred_time_of_day, focus_span_minutes, fatigue_level)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (4.0, "morning", 45, "medium")
+            (user_id, 4.0, "morning", 45, "medium")
         )
         conn.commit()
-        cursor.execute("SELECT * FROM study_preferences ORDER BY id DESC LIMIT 1")
+        if user_id is not None:
+            cursor.execute("SELECT * FROM study_preferences WHERE user_id = ? ORDER BY id DESC LIMIT 1", (user_id,))
+        else:
+            cursor.execute("SELECT * FROM study_preferences WHERE user_id IS NULL ORDER BY id DESC LIMIT 1")
         row = cursor.fetchone()
 
     return dict(row)
 
 
-@preferences_bp.route("", methods=["GET"])
+@preferences_bp.route("", methods=["GET"], strict_slashes=False)
+@login_required_api
 def get_preferences():
-    """Retrieve current student study preferences."""
+    """Retrieve current student study preferences for active user."""
+    user_id = get_current_user_id()
     conn = get_db_connection()
-    prefs = get_or_create_preferences(conn)
+    prefs = get_or_create_preferences(conn, user_id=user_id)
 
     return jsonify({
         "success": True,
@@ -48,9 +58,10 @@ def get_preferences():
     }), 200
 
 
-@preferences_bp.route("", methods=["PUT", "POST"])
+@preferences_bp.route("", methods=["PUT", "POST"], strict_slashes=False)
+@login_required_api
 def update_preferences():
-    """Update current student study preferences."""
+    """Update current student study preferences for active user."""
     data = request.get_json(silent=True)
     if data is None:
         return jsonify({
@@ -72,8 +83,9 @@ def update_preferences():
             }
         }), 400
 
+    user_id = get_current_user_id()
     conn = get_db_connection()
-    current = get_or_create_preferences(conn)
+    current = get_or_create_preferences(conn, user_id=user_id)
     cursor = conn.cursor()
 
     fields_to_update = []
@@ -101,7 +113,7 @@ def update_preferences():
     cursor.execute(query, tuple(params))
     conn.commit()
 
-    updated = get_or_create_preferences(conn)
+    updated = get_or_create_preferences(conn, user_id=user_id)
 
     return jsonify({
         "success": True,

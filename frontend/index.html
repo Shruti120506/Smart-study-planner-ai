@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Study Planner AI - Student Dashboard</title>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <!-- Toast Notification Hub -->
+  <div id="toast-container"></div>
+
+  <div class="app-wrapper">
+
+    <!-- 1. Left Sidebar Navigation -->
+    <aside class="app-sidebar" id="app-sidebar">
+      <div class="sidebar-header">
+        <div class="brand-icon-wrapper">🎓</div>
+        <div class="brand-info">
+          <h1>Smart Planner</h1>
+          <span>AI Expert System</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a class="nav-link active" data-view="dashboard">
+          <span class="nav-icon">📊</span>
+          <span>Dashboard</span>
+        </a>
+        <a class="nav-link" data-view="subjects">
+          <span class="nav-icon">📚</span>
+          <span>My Subjects</span>
+        </a>
+        <a class="nav-link" data-view="planner">
+          <span class="nav-icon">📅</span>
+          <span>Study Planner</span>
+        </a>
+        <a class="nav-link" data-view="timetable">
+          <span class="nav-icon">🗓️</span>
+          <span>Weekly Timetable</span>
+        </a>
+        <a class="nav-link" data-view="goals">
+          <span class="nav-icon">🎯</span>
+          <span>Exam Goals</span>
+        </a>
+        <a class="nav-link" data-view="analytics">
+          <span class="nav-icon">📈</span>
+          <span>Progress & Analytics</span>
+        </a>
+        <a class="nav-link" data-view="insights">
+          <span class="nav-icon">💡</span>
+          <span>AI Insights</span>
+        </a>
+        <a class="nav-link" data-view="preferences">
+          <span class="nav-icon">⚙️</span>
+          <span>Study Preferences</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="system-pill" id="system-status-badge">
+          <span class="pill-dot"></span>
+          <span id="system-status-text">AI Engine Active</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 2. Main Viewport -->
+    <div class="app-viewport">
+      
+      <!-- Top Navbar -->
+      <header class="top-navbar">
+        <div class="navbar-left">
+          <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Toggle Navigation">☰</button>
+          <h2 class="navbar-page-title" id="page-title-text">Dashboard</h2>
+        </div>
+        <div class="navbar-right">
+          <button class="btn btn-outline btn-sm" id="btn-seed-sample">
+            📥 Load Sample Subjects
+          </button>
+          <div class="user-profile-badge" id="user-profile-badge" style="display: inline-flex; align-items: center; gap: 0.6rem; margin-left: 0.75rem; padding: 0.35rem 0.75rem; background: #f1f5f9; border-radius: 9999px; font-size: 0.85rem;">
+            <span class="user-avatar" style="width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700;">👤</span>
+            <span class="user-display-name" id="user-display-name" style="font-weight: 600; color: var(--navy-800);">Student</span>
+          </div>
+          <button class="btn btn-outline btn-sm" id="btn-logout" title="Sign out of your account" style="margin-left: 0.5rem; color: var(--danger); border-color: #fecaca;">
+            🚪 Log Out
+          </button>
+        </div>
+      </header>
+
+      <!-- Viewport Content Area -->
+      <main class="content-area">
+
+        <!-- ================================================================
+             SECTION 1: DASHBOARD OVERVIEW
+             ================================================================ -->
+        <section class="view-section active-view" id="view-dashboard">
+          
+          <!-- Welcome Banner -->
+          <div class="welcome-banner">
+            <div class="welcome-text">
+              <h2>Welcome to your Study Command Center! ✨</h2>
+              <p>Achieve your target grades with an intelligent, fatigue-aware study schedule built by our symbolic rule-based AI engine.</p>
+            </div>
+            <button class="btn btn-white" id="btn-generate-plan" style="font-weight: 700;">
+              ⚡ Generate My Study Plan
+            </button>
+          </div>
+
+          <!-- 5 Key Summary Cards -->
+          <div class="metrics-row">
+            <div class="metric-card">
+              <div class="metric-info">
+                <div class="metric-label">Total Subjects</div>
+                <div class="metric-value" id="metric-total-subjects">0</div>
+                <div class="metric-sub" id="metric-total-units-sub">0 total chapters</div>
+              </div>
+              <div class="metric-icon-box box-indigo">📚</div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-info">
+                <div class="metric-label">Today's Study Target</div>
+                <div class="metric-value" id="metric-daily-target">4.0h</div>
+                <div class="metric-sub" id="metric-fatigue-sub">Medium pace</div>
+              </div>
+              <div class="metric-icon-box box-amber">⏱️</div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-info">
+                <div class="metric-label">Tasks Completed</div>
+                <div class="metric-value" id="metric-tasks-done">0 / 0</div>
+                <div class="metric-sub" id="metric-tasks-pct">0% finished today</div>
+              </div>
+              <div class="metric-icon-box box-emerald">✅</div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-info">
+                <div class="metric-label">Overall Progress</div>
+                <div class="metric-value" id="metric-overall-progress">0%</div>
+                <div class="metric-sub" id="metric-overall-sub">All chapters</div>
+              </div>
+              <div class="metric-icon-box box-purple">📈</div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-info">
+                <div class="metric-label">Upcoming Exams</div>
+                <div class="metric-value" id="metric-upcoming-exams">0</div>
+                <div class="metric-sub" id="metric-nearest-exam-sub">Next in -- days</div>
+              </div>
+              <div class="metric-icon-box box-blue">🎯</div>
+            </div>
+          </div>
+
+          <!-- Split: Today's Plan & Exam Readiness -->
+          <div class="dashboard-split">
+            
+            <!-- Left: Today's Study Plan -->
+            <div class="app-card">
+              <div class="card-topbar">
+                <div>
+                  <h3 class="card-heading">
+                    <span>📅</span> Today's Study Plan
+                  </h3>
+                  <span class="card-subtitle">Personalized schedule generated by AI</span>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="document.getElementById('btn-generate-plan').click()">
+                  ⚡ New Plan
+                </button>
+              </div>
+
+              <!-- Study Progress Bar -->
+              <div class="plan-progress-wrapper">
+                <div class="progress-header-row">
+                  <span>Today's Completion Progress</span>
+                  <span id="plan-progress-pct-badge">0%</span>
+                </div>
+                <div class="progress-track-bg">
+                  <div class="progress-fill-bar" id="plan-progress-fill" style="width: 0%;"></div>
+                </div>
+              </div>
+
+              <!-- Sessions List -->
+              <div class="sessions-list-container" id="dashboard-sessions-list">
+                <div class="empty-placeholder">
+                  <p>No study sessions scheduled for today yet.</p>
+                  <button class="btn btn-primary btn-sm" onclick="document.getElementById('btn-generate-plan').click()">
+                    Generate Study Plan
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right: Quick Exam Readiness & Goals -->
+            <div class="app-card">
+              <div class="card-topbar">
+                <div>
+                  <h3 class="card-heading">
+                    <span>🎯</span> Exam Goal Feasibility
+                  </h3>
+                  <span class="card-subtitle">Backward-chaining capacity check</span>
+                </div>
+                <button class="btn btn-outline btn-sm" id="btn-quick-check-goals">
+                  Re-check
+                </button>
+              </div>
+
+              <div class="goals-cards-list" id="dashboard-goals-summary">
+                <div class="empty-placeholder">
+                  <p>Checking goal feasibility...</p>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+        </section>
+
+
+        <!-- ================================================================
+             SECTION 2: MY SUBJECTS
+             ================================================================ -->
+        <section class="view-section" id="view-subjects">
+          <div class="app-card">
+            <div class="card-topbar">
+              <div>
+                <h3 class="card-heading">
+                  <span>📚</span> Enrolled Academic Subjects
+                </h3>
+                <span class="card-subtitle">Manage subjects, difficulty levels, and syllabus units</span>
+              </div>
+              <button class="btn btn-primary btn-sm" id="btn-open-add-subject">
+                + Add Subject
+              </button>
+            </div>
+
+            <div class="subjects-table-container">
+              <table class="modern-table">
+                <thead>
+                  <tr>
+                    <th>Subject Name</th>
+                    <th>Difficulty</th>
+                    <th>Target Grade</th>
+                    <th>Exam Countdown</th>
+                    <th>Syllabus Progress</th>
+                    <th style="text-align: right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="subjects-table-tbody">
+                  <tr>
+                    <td colspan="6" class="empty-placeholder">Loading enrolled subjects...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+
+        <!-- ================================================================
+             SECTION 3: STUDY PLANNER
+             ================================================================ -->
+        <section class="view-section" id="view-planner">
+          <div class="app-card">
+            <div class="card-topbar">
+              <div>
+                <h3 class="card-heading">
+                  <span>📅</span> Study Planner & Daily Sessions
+                </h3>
+                <span class="card-subtitle">Check off completed sessions to update your academic progress</span>
+              </div>
+              <button class="btn btn-primary btn-sm" onclick="document.getElementById('btn-generate-plan').click()">
+                ⚡ Re-Generate Daily Schedule
+              </button>
+            </div>
+
+            <div class="sessions-list-container" id="planner-sessions-list">
+              <div class="empty-placeholder">
+                <p>No plan generated yet.</p>
+                <button class="btn btn-primary btn-sm" onclick="document.getElementById('btn-generate-plan').click()">Generate Now</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+
+        <!-- ================================================================
+             SECTION 4: WEEKLY TIMETABLE
+             ================================================================ -->
+        <section class="view-section" id="view-timetable">
+          <div class="app-card">
+            <div class="card-topbar">
+              <div>
+                <h3 class="card-heading">
+                  <span>🗓️</span> 7-Day Weekly Study Timetable
+                </h3>
+                <span class="card-subtitle">Visual overview of your daily focus blocks and revision schedule</span>
+              </div>
+            </div>
+
+            <div class="weekly-schedule-grid" id="weekly-timetable-grid">
+              <!-- Dynamically populated 7 days -->
+            </div>
+          </div>
+        </section>
+
+
+        <!-- ================================================================
+             SECTION 5: EXAM GOALS (BACKWARD CHAINING)
+             ================================================================ -->
+        <section class="view-section" id="view-goals">
+          <div class="app-card">
+            <div class="card-topbar">
+              <div>
+                <h3 class="card-heading">
+                  <span>🎯</span> Exam Goal Feasibility Analyzer
+                </h3>
+                <span class="card-subtitle">Mathematical verification of whether your study hours can cover all chapters before exams</span>
+              </div>
+            </div>
+
+            <!-- Parameters Bar -->
+            <div class="goals-config-bar">
+              <div class="form-group">
+                <label class="form-label" for="goals-daily-budget-input">Daily Study Target (Hours)</label>
+                <input type="number" id="goals-daily-budget-input" class="form-control" min="0.5" max="16.0" step="0.5" value="4.0">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="goals-fatigue-select">Cognitive Energy Level</label>
+                <select id="goals-fatigue-select" class="form-control">
+                  <option value="low">High Energy (Low Fatigue)</option>
+                  <option value="medium" selected>Normal Energy (Medium Fatigue)</option>
+                  <option value="high">Fatigued (Shorter Focus Spans)</option>
+                </select>
+              </div>
+              <button class="btn btn-primary" id="btn-run-goals-analysis">
+                Analyze Feasibility
+              </button>
+            </div>
+
+            <div class="goals-cards-list" id="goals-full-list">
+              <div class="empty-placeholder">
+                <p>Click "Analyze Feasibility" to test your upcoming exam goals.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+
+        <!-- ================================================================
+             SECTION 6: PROGRESS & ANALYTICS
+             ================================================================ -->
+        <section class="view-section" id="view-analytics">
+          <div class="analytics-stats-row">
+            <div class="analytics-stat-pill">
+              <span class="stat-label">Planned Study Time (Today's Plan)</span>
+              <span class="stat-num" id="analytics-planned-hours">0.0h</span>
+            </div>
+            <div class="analytics-stat-pill">
+              <span class="stat-label">Actual Completed Study Time</span>
+              <span class="stat-num" id="analytics-completed-hours" style="color: var(--success);">0.0h</span>
+            </div>
+          </div>
+
+          <div class="analytics-grid">
+            
+            <!-- Subject-wise Progress -->
+            <div class="chart-card">
+              <h4>Course Syllabus Completion</h4>
+              <div class="horizontal-bars-container" id="analytics-syllabus-bars">
+                <div class="empty-placeholder">No subjects found</div>
+              </div>
+            </div>
+
+            <!-- Weekly Study Distribution -->
+            <div class="chart-card">
+              <h4>Weekly Study Hours Distribution</h4>
+              <div class="weekly-bar-chart" id="analytics-weekly-bars">
+                <!-- Day columns -->
+              </div>
+              <div style="font-size: 0.775rem; color: var(--text-muted); margin-top: 0.85rem; text-align: center;" id="analytics-target-note">
+                Target: 4.0 hours per scheduled study day
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+
+        <!-- ================================================================
+             SECTION 7: AI INSIGHTS & EXPLANATIONS
+             ================================================================ -->
+        <section class="view-section" id="view-insights">
+          <div class="app-card">
+            <div class="card-topbar">
+              <div>
+                <h3 class="card-heading">
+                  <span>💡</span> AI Study Insights & Rule Traceability
+                </h3>
+                <span class="card-subtitle">Transparent explainability: understand why the AI prioritized each subject</span>
+              </div>
+            </div>
+
+            <div class="insights-list" id="ai-insights-list">
+              <div class="empty-placeholder">
+                <p>Generate a study plan to view AI reasoning logs.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+
+        <!-- ================================================================
+             SECTION 8: STUDY PREFERENCES
+             ================================================================ -->
+        <section class="view-section" id="view-preferences">
+          <div class="app-card">
+            <div class="card-topbar">
+              <div>
+                <h3 class="card-heading">
+                  <span>⚙️</span> Student Study Preferences
+                </h3>
+                <span class="card-subtitle">Customize daily study capacity and energy preferences</span>
+              </div>
+            </div>
+
+            <form id="full-preferences-form">
+              <div class="preferences-form-grid">
+                
+                <div class="form-group">
+                  <label class="form-label" for="pref-daily-hours-input">
+                    Daily Available Study Hours (0.5 – 16.0h)
+                  </label>
+                  <input type="number" id="pref-daily-hours-input" class="form-control" min="0.5" max="16.0" step="0.5" required>
+                  <span style="font-size: 0.75rem; color: var(--text-light);">Maximum time allocated across all courses per day.</span>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="pref-slot-select">
+                    Preferred Time of Day
+                  </label>
+                  <select id="pref-slot-select" class="form-control">
+                    <option value="morning">Morning</option>
+                    <option value="afternoon">Afternoon</option>
+                    <option value="night">Night</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="pref-focus-input">
+                    Continuous Focus Span (15 – 120 mins)
+                  </label>
+                  <input type="number" id="pref-focus-input" class="form-control" min="15" max="120" step="5" required>
+                  <span style="font-size: 0.75rem; color: var(--text-light);">Ideal session duration before a break.</span>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="pref-fatigue-level-select">
+                    Fatigue / Energy Level
+                  </label>
+                  <select id="pref-fatigue-level-select" class="form-control">
+                    <option value="low">Low (Energetic / High focus capacity)</option>
+                    <option value="medium">Medium (Standard collegiate pace)</option>
+                    <option value="high">High (Fatigued / Shorter blocks with recovery breaks)</option>
+                  </select>
+                </div>
+
+              </div>
+
+              <div style="margin-top: 1.5rem; display: flex; justify-content: flex-end;">
+                <button type="submit" class="btn btn-primary" id="btn-save-prefs-form">
+                  Save Preferences
+                </button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+      </main>
+
+    </div>
+
+  </div>
+
+  <!-- Subject Add / Edit Modal -->
+  <div class="modal-overlay" id="subject-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h4 class="modal-title" id="subject-modal-title">Add Academic Subject</h4>
+        <button class="close-btn" id="btn-close-modal">&times;</button>
+      </div>
+      <form id="subject-form">
+        <div class="modal-body">
+          <input type="hidden" id="modal-subject-id">
+
+          <div class="form-group">
+            <label class="form-label" for="modal-subject-name">Subject Name *</label>
+            <input type="text" id="modal-subject-name" class="form-control" placeholder="e.g. Operating Systems" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="modal-subject-difficulty">Difficulty Level</label>
+            <select id="modal-subject-difficulty" class="form-control">
+              <option value="easy">Easy (1.0h / chapter)</option>
+              <option value="medium" selected>Medium (1.5h / chapter)</option>
+              <option value="hard">Hard (2.5h / chapter)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="modal-subject-grade">Target Grade</label>
+            <input type="text" id="modal-subject-grade" class="form-control" value="A" maxlength="5">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="modal-subject-exam">Exam Date</label>
+            <input type="date" id="modal-subject-exam" class="form-control">
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+            <div class="form-group">
+              <label class="form-label" for="modal-subject-total">Total Chapters</label>
+              <input type="number" id="modal-subject-total" class="form-control" min="1" max="100" value="5" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="modal-subject-completed">Chapters Completed</label>
+              <input type="number" id="modal-subject-completed" class="form-control" min="0" max="100" value="0" required>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline" id="btn-cancel-modal">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-subject">Save Subject</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

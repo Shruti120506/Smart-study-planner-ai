@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Study Planner AI - Login</title>
+  <meta name="description" content="Sign in to your Smart Study Planner AI student dashboard to access your study plans and analytics.">
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <style>
+    /* Auth Layout Styles */
+    body.auth-body {
+      background: radial-gradient(circle at 10% 20%, rgba(79, 70, 229, 0.08) 0%, rgba(248, 250, 252, 1) 90%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+
+    .auth-container {
+      width: 100%;
+      max-width: 440px;
+      margin: 0 auto;
+    }
+
+    .auth-brand {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .auth-brand-icon {
+      width: 60px;
+      height: 60px;
+      background: var(--primary-gradient);
+      border-radius: var(--radius-lg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      box-shadow: var(--shadow-glow);
+      margin-bottom: 1rem;
+      animation: floatBadge 3s ease-in-out infinite alternate;
+    }
+
+    @keyframes floatBadge {
+      0% { transform: translateY(0px); }
+      100% { transform: translateY(-5px); }
+    }
+
+    .auth-brand h1 {
+      font-size: 1.6rem;
+      font-weight: 800;
+      color: var(--navy-900);
+      letter-spacing: -0.02em;
+    }
+
+    .auth-brand p {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+
+    .auth-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      padding: 2.25rem;
+      box-shadow: var(--shadow-lg);
+      backdrop-filter: blur(12px);
+    }
+
+    .auth-card h2 {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: var(--navy-900);
+      margin-bottom: 0.5rem;
+    }
+
+    .auth-card-subtitle {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      margin-bottom: 1.75rem;
+    }
+
+    .auth-alert {
+      display: none;
+      padding: 0.85rem 1rem;
+      border-radius: var(--radius-md);
+      font-size: 0.88rem;
+      margin-bottom: 1.25rem;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .auth-alert.show {
+      display: flex;
+    }
+
+    .auth-alert-danger {
+      background: var(--danger-light);
+      border: 1px solid #fecaca;
+      color: #b91c1c;
+    }
+
+    .auth-alert-success {
+      background: var(--success-light);
+      border: 1px solid #bbf7d0;
+      color: #166534;
+    }
+
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--navy-800);
+      margin-bottom: 0.45rem;
+    }
+
+    .password-input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .password-input-wrapper input {
+      padding-right: 2.75rem;
+      width: 100%;
+    }
+
+    .password-toggle-btn {
+      position: absolute;
+      right: 0.75rem;
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.25rem;
+      border-radius: var(--radius-sm);
+      transition: color 0.15s ease;
+    }
+
+    .password-toggle-btn:hover {
+      color: var(--primary);
+    }
+
+    .form-options-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.5rem;
+      font-size: 0.88rem;
+    }
+
+    .remember-me-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .remember-me-label input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--primary);
+      cursor: pointer;
+    }
+
+    .btn-submit-auth {
+      width: 100%;
+      height: 48px;
+      font-size: 1rem;
+      font-weight: 600;
+      border-radius: var(--radius-md);
+      background: var(--primary-gradient);
+      color: #ffffff;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      box-shadow: var(--shadow-glow);
+      transition: all 0.2s ease;
+    }
+
+    .btn-submit-auth:hover {
+      opacity: 0.95;
+      transform: translateY(-1px);
+    }
+
+    .btn-submit-auth:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .auth-footer-links {
+      text-align: center;
+      margin-top: 1.75rem;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .auth-footer-links a {
+      color: var(--primary);
+      font-weight: 600;
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+
+    .auth-footer-links a:hover {
+      text-decoration: underline;
+    }
+
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255, 255, 255, 0.4);
+      border-top-color: #ffffff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body class="auth-body">
+
+  <div class="auth-container">
+    <!-- Brand Header -->
+    <header class="auth-brand">
+      <div class="auth-brand-icon">🎓</div>
+      <h1>Smart Study Planner AI</h1>
+      <p>Rule-Based Student Productivity & Optimization Engine</p>
+    </header>
+
+    <!-- Login Card -->
+    <main class="auth-card">
+      <h2>Welcome Back</h2>
+      <p class="auth-card-subtitle">Sign in to your student study command center</p>
+
+      <!-- Alert Box -->
+      <div id="auth-alert" class="auth-alert auth-alert-danger" role="alert">
+        <span id="auth-alert-icon">⚠️</span>
+        <span id="auth-alert-text">Error message here</span>
+      </div>
+
+      <form id="login-form" novalidate>
+        <!-- Email Input -->
+        <div class="form-group">
+          <label for="login-email">Student Email Address</label>
+          <input 
+            type="email" 
+            id="login-email" 
+            name="email" 
+            class="form-control" 
+            placeholder="e.g. student@college.edu" 
+            required 
+            autocomplete="email"
+          >
+        </div>
+
+        <!-- Password Input -->
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <div class="password-input-wrapper">
+            <input 
+              type="password" 
+              id="login-password" 
+              name="password" 
+              class="form-control" 
+              placeholder="Enter your password" 
+              required 
+              autocomplete="current-password"
+            >
+            <button 
+              type="button" 
+              class="password-toggle-btn" 
+              id="btn-toggle-password" 
+              aria-label="Toggle password visibility"
+              tabindex="-1"
+            >
+              👁️
+            </button>
+          </div>
+        </div>
+
+        <!-- Options: Remember Me -->
+        <div class="form-options-row">
+          <label class="remember-me-label">
+            <input type="checkbox" id="login-remember" name="remember_me">
+            <span>Remember me for 30 days</span>
+          </label>
+        </div>
+
+        <!-- Submit Button -->
+        <button type="submit" class="btn-submit-auth" id="btn-login-submit">
+          <span id="btn-login-text">Sign In to Dashboard</span>
+          <div class="spinner" id="btn-login-spinner" style="display: none;"></div>
+        </button>
+      </form>
+
+      <!-- Switch to Register -->
+      <div class="auth-footer-links">
+        Don't have an account yet? <a href="/register">Create student account</a>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const loginForm = document.getElementById("login-form");
+      const emailInput = document.getElementById("login-email");
+      const passwordInput = document.getElementById("login-password");
+      const rememberCheckbox = document.getElementById("login-remember");
+      const togglePasswordBtn = document.getElementById("btn-toggle-password");
+      const alertBox = document.getElementById("auth-alert");
+      const alertText = document.getElementById("auth-alert-text");
+      const submitBtn = document.getElementById("btn-login-submit");
+      const submitText = document.getElementById("btn-login-text");
+      const submitSpinner = document.getElementById("btn-login-spinner");
+
+      // Password visibility toggle
+      togglePasswordBtn.addEventListener("click", () => {
+        const isPassword = passwordInput.getAttribute("type") === "password";
+        passwordInput.setAttribute("type", isPassword ? "text" : "password");
+        togglePasswordBtn.textContent = isPassword ? "🙈" : "👁️";
+      });
+
+      function showAlert(message, isError = true) {
+        alertBox.className = `auth-alert ${isError ? 'auth-alert-danger' : 'auth-alert-success'} show`;
+        document.getElementById("auth-alert-icon").textContent = isError ? "⚠️" : "✅";
+        alertText.textContent = message;
+      }
+
+      function hideAlert() {
+        alertBox.className = "auth-alert";
+      }
+
+      function setLoading(isLoading) {
+        submitBtn.disabled = isLoading;
+        if (isLoading) {
+          submitText.textContent = "Authenticating...";
+          submitSpinner.style.display = "block";
+        } else {
+          submitText.textContent = "Sign In to Dashboard";
+          submitSpinner.style.display = "none";
+        }
+      }
+
+      loginForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        hideAlert();
+
+        const email = emailInput.value.trim();
+        const password = passwordInput.value;
+        const remember_me = rememberCheckbox.checked;
+
+        if (!email || !password) {
+          showAlert("Please enter both your email address and password.");
+          return;
+        }
+
+        setLoading(true);
+
+        try {
+          const res = await fetch("/api/auth/login", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ email, password, remember_me })
+          });
+
+          const data = await res.json();
+
+          if (res.ok && data.success) {
+            showAlert("Login successful! Redirecting to dashboard...", false);
+            setTimeout(() => {
+              window.location.href = "/dashboard";
+            }, 600);
+          } else {
+            const errorMsg = data.error?.messages ? data.error.messages.join(" ") : (data.error?.message || "Invalid credentials.");
+            showAlert(errorMsg, true);
+            setLoading(false);
+          }
+        } catch (err) {
+          console.error("Login request failed:", err);
+          showAlert("Unable to connect to the authentication server. Please check your connection.", true);
+          setLoading(false);
+        }
+      });
+    });
+  </script>
+</body>
+</html>

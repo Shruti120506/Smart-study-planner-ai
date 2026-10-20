@@ -38,3 +38,5 @@ htmlcov/
 Thumbs.db
 Desktop.ini
 .DS_Store
+# Local session cookies
+cookies.txt

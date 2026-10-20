@@ -1,6 +1,6 @@
 """
 Subjects Blueprint for Smart Study Planner AI
-Provides REST endpoints for Subject CRUD and sample data population.
+Provides REST endpoints for Subject CRUD and sample data population, scoped to authenticated user.
 """
 
 from datetime import datetime
@@ -8,9 +8,11 @@ from flask import Blueprint, jsonify, request
 try:
     from backend.database.db import get_db_connection, load_sample_subjects
     from backend.routes.validators import validate_subject_payload
+    from backend.auth.security import login_required_api, get_current_user_id
 except ImportError:
     from database.db import get_db_connection, load_sample_subjects
     from routes.validators import validate_subject_payload
+    from auth.security import login_required_api, get_current_user_id
 
 subjects_bp = Blueprint("subjects", __name__, url_prefix="/api/subjects")
 
@@ -37,20 +39,37 @@ def enrich_subject_row(row):
     return item
 
 
-@subjects_bp.route("", methods=["GET"])
+@subjects_bp.route("", methods=["GET"], strict_slashes=False)
+@login_required_api
 def list_subjects():
-    """Retrieve all enrolled subjects sorted by exam date and creation time."""
+    """Retrieve all enrolled subjects for the active user sorted by exam date and creation time."""
+    user_id = get_current_user_id()
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute(
-        """
-        SELECT * FROM subjects 
-        ORDER BY 
-            CASE WHEN exam_date IS NULL THEN 1 ELSE 0 END,
-            exam_date ASC, 
-            id ASC
-        """
-    )
+
+    if user_id is not None:
+        cursor.execute(
+            """
+            SELECT * FROM subjects 
+            WHERE user_id = ?
+            ORDER BY 
+                CASE WHEN exam_date IS NULL THEN 1 ELSE 0 END,
+                exam_date ASC, 
+                id ASC
+            """,
+            (user_id,)
+        )
+    else:
+        cursor.execute(
+            """
+            SELECT * FROM subjects 
+            WHERE user_id IS NULL
+            ORDER BY 
+                CASE WHEN exam_date IS NULL THEN 1 ELSE 0 END,
+                exam_date ASC, 
+                id ASC
+            """
+        )
     rows = cursor.fetchall()
     subjects = [enrich_subject_row(r) for r in rows]
 
@@ -62,11 +81,17 @@ def list_subjects():
 
 
 @subjects_bp.route("/<int:subject_id>", methods=["GET"])
+@login_required_api
 def get_subject(subject_id):
-    """Retrieve a single subject by ID."""
+    """Retrieve a single subject by ID (scoped to active user)."""
+    user_id = get_current_user_id()
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM subjects WHERE id = ?", (subject_id,))
+
+    if user_id is not None:
+        cursor.execute("SELECT * FROM subjects WHERE id = ? AND user_id = ?", (subject_id, user_id))
+    else:
+        cursor.execute("SELECT * FROM subjects WHERE id = ? AND user_id IS NULL", (subject_id,))
     row = cursor.fetchone()
 
     if not row:
@@ -84,9 +109,11 @@ def get_subject(subject_id):
     }), 200
 
 
-@subjects_bp.route("", methods=["POST"])
+@subjects_bp.route("", methods=["POST"], strict_slashes=False)
+@login_required_api
 def create_subject():
-    """Create a new academic subject."""
+    """Create a new academic subject for the active user."""
+    user_id = get_current_user_id()
     data = request.get_json(silent=True)
     if data is None:
         return jsonify({
@@ -111,8 +138,12 @@ def create_subject():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Check for duplicate subject name
-    cursor.execute("SELECT id FROM subjects WHERE LOWER(name) = LOWER(?)", (cleaned["name"],))
+    # Check for duplicate subject name scoped to active user
+    if user_id is not None:
+        cursor.execute("SELECT id FROM subjects WHERE LOWER(name) = LOWER(?) AND user_id = ?", (cleaned["name"], user_id))
+    else:
+        cursor.execute("SELECT id FROM subjects WHERE LOWER(name) = LOWER(?) AND user_id IS NULL", (cleaned["name"],))
+
     if cursor.fetchone():
         return jsonify({
             "success": False,
@@ -124,10 +155,11 @@ def create_subject():
 
     cursor.execute(
         """
-        INSERT INTO subjects (name, difficulty_level, target_grade, exam_date, syllabus_units_total, units_completed)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO subjects (user_id, name, difficulty_level, target_grade, exam_date, syllabus_units_total, units_completed)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         (
+            user_id,
             cleaned["name"],
             cleaned.get("difficulty_level", "medium"),
             cleaned.get("target_grade", "A"),
@@ -150,12 +182,17 @@ def create_subject():
 
 
 @subjects_bp.route("/<int:subject_id>", methods=["PUT"])
+@login_required_api
 def update_subject(subject_id):
-    """Update an existing subject by ID."""
+    """Update an existing subject by ID (scoped to active user)."""
+    user_id = get_current_user_id()
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM subjects WHERE id = ?", (subject_id,))
+    if user_id is not None:
+        cursor.execute("SELECT * FROM subjects WHERE id = ? AND user_id = ?", (subject_id, user_id))
+    else:
+        cursor.execute("SELECT * FROM subjects WHERE id = ? AND user_id IS NULL", (subject_id,))
     existing = cursor.fetchone()
 
     if not existing:
@@ -188,9 +225,18 @@ def update_subject(subject_id):
             }
         }), 400
 
-    # If updating name, check it doesn't conflict with another existing subject
+    # If updating name, check it doesn't conflict with another existing subject belonging to same user
     if "name" in cleaned and cleaned["name"].lower() != existing["name"].lower():
-        cursor.execute("SELECT id FROM subjects WHERE LOWER(name) = LOWER(?) AND id != ?", (cleaned["name"], subject_id))
+        if user_id is not None:
+            cursor.execute(
+                "SELECT id FROM subjects WHERE LOWER(name) = LOWER(?) AND id != ? AND user_id = ?",
+                (cleaned["name"], subject_id, user_id)
+            )
+        else:
+            cursor.execute(
+                "SELECT id FROM subjects WHERE LOWER(name) = LOWER(?) AND id != ? AND user_id IS NULL",
+                (cleaned["name"], subject_id)
+            )
         if cursor.fetchone():
             return jsonify({
                 "success": False,
@@ -232,12 +278,17 @@ def update_subject(subject_id):
 
 
 @subjects_bp.route("/<int:subject_id>", methods=["DELETE"])
+@login_required_api
 def delete_subject(subject_id):
-    """Delete a subject by ID."""
+    """Delete a subject by ID (scoped to active user)."""
+    user_id = get_current_user_id()
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT name FROM subjects WHERE id = ?", (subject_id,))
+    if user_id is not None:
+        cursor.execute("SELECT name FROM subjects WHERE id = ? AND user_id = ?", (subject_id, user_id))
+    else:
+        cursor.execute("SELECT name FROM subjects WHERE id = ? AND user_id IS NULL", (subject_id,))
     existing = cursor.fetchone()
 
     if not existing:
@@ -259,9 +310,11 @@ def delete_subject(subject_id):
 
 
 @subjects_bp.route("/sample", methods=["POST"])
+@login_required_api
 def seed_sample_subjects():
-    """Load pre-configured sample college subjects without creating duplicates."""
-    result = load_sample_subjects()
+    """Load pre-configured sample college subjects for active user without creating duplicates."""
+    user_id = get_current_user_id()
+    result = load_sample_subjects(user_id=user_id)
     return jsonify({
         "success": True,
         "message": f"Sample subjects loaded: {result['added_count']} added, {result['skipped_count']} already present.",
