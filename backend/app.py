@@ -21,6 +21,7 @@ for path_str in [str(PROJECT_ROOT), str(BACKEND_DIR)]:
 
 from flask import Flask, jsonify, send_from_directory, request, redirect
 from flask_cors import CORS
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 FRONTEND_DIR = PROJECT_ROOT / "frontend"
 
@@ -52,19 +53,47 @@ def create_app(test_config=None):
         static_url_path="/static"
     )
 
+    # Environment detection
+    flask_env = os.environ.get("FLASK_ENV", "development").lower()
+    is_render = "RENDER" in os.environ
+    is_prod = flask_env == "production" or is_render
+
     # Default configuration: instance/planner.db in project root
     default_db = PROJECT_ROOT / "instance" / "planner.db"
-    secret_key = os.environ.get("SECRET_KEY", "smart-study-planner-secret-key-production-ready-2026")
+    database_url = os.environ.get("DATABASE_URL")
+
+    # SECRET_KEY resolution: In production, require an explicit, non-default SECRET_KEY
+    hardcoded_default_key = "smart-study-planner-secret-key-production-ready-2026"
+    env_secret_key = os.environ.get("SECRET_KEY")
+
+    if is_prod and not (test_config and test_config.get("TESTING")):
+        if not env_secret_key or env_secret_key == hardcoded_default_key or len(env_secret_key) < 32:
+            raise RuntimeError(
+                "CRITICAL PRODUCTION SECURITY ERROR: A secure, random SECRET_KEY environment variable "
+                "(minimum 32 characters) must be configured in production/Render. Do not use default keys."
+            )
+        secret_key = env_secret_key
+    else:
+        # Development / local fallback
+        secret_key = env_secret_key or hardcoded_default_key
+
+    # Configure secure cookies in production/Render
+    cookie_secure = is_prod
 
     app.config.from_mapping(
         SECRET_KEY=secret_key,
         DATABASE=str(default_db),
+        DATABASE_URL=database_url,
         JSON_SORT_KEYS=False,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
-        SESSION_COOKIE_SECURE=False, # Set True in HTTPS production
+        SESSION_COOKIE_SECURE=cookie_secure,
         LEGACY_TEST_MODE=True
     )
+
+    # Apply ProxyFix middleware behind Render's reverse proxy so request.is_secure and headers are trusted
+    if is_prod:
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
     # Override config if test_config is provided (e.g., during pytest execution)
     if test_config:
@@ -229,5 +258,7 @@ def create_app(test_config=None):
 app = create_app()
 
 if __name__ == "__main__":
-    # Runs local dev server on http://127.0.0.1:5000
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    # Runs local dev server on http://127.0.0.1:5000 or custom PORT
+    port = int(os.environ.get("PORT", 5000))
+    is_debug = os.environ.get("FLASK_ENV", "development").lower() != "production" and "RENDER" not in os.environ
+    app.run(host="0.0.0.0", port=port, debug=is_debug)

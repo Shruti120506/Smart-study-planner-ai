@@ -1,0 +1,28 @@
+# Render Blueprint Configuration for Smart Study Planner AI
+# Deploys Flask backend with Gunicorn, pure-Python PostgreSQL client, and optional Render Managed PostgreSQL
+# Documentation: https://render.com/docs/blueprint-spec
+
+databases:
+  - name: study-planner-db
+    databaseName: study_planner
+    user: study_planner_user
+    plan: free # or standard for persistent production use
+
+services:
+  - type: web
+    name: smart-study-planner
+    runtime: python
+    plan: free # or starter
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn \"backend.app:create_app()\" -w 2 --threads 4 -b 0.0.0.0:$PORT"
+    envVars:
+      - key: FLASK_ENV
+        value: production
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: study-planner-db
+          property: connectionString

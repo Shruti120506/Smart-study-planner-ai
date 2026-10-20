@@ -1,18 +1,52 @@
 """
-Database Management Module for Smart Study Planner AI
-Handles SQLite connections, schema initialization, safe migrations, sample data, and query helpers.
+Database Management Module for Smart Study Planner AI.
+Supports both SQLite (local development and tests) and PostgreSQL (production on Render).
+Preserves existing SQLite functionality, local data, queries, and row factory conventions.
 """
 
 import os
+import re
 import sqlite3
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from flask import current_app, g
+
+# Optional PostgreSQL driver imports
+try:
+    import pg8000.dbapi as pg8000_dbapi
+except ImportError:
+    pg8000_dbapi = None
+
+try:
+    import psycopg2
+    import psycopg2.extras
+except ImportError:
+    psycopg2 = None
 
 # Default database location inside 'instance/' folder at project root
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DEFAULT_DB_PATH = BASE_DIR / "instance" / "planner.db"
 SCHEMA_FILE_PATH = Path(__file__).resolve().parent / "schema.sql"
+SCHEMA_PG_FILE_PATH = Path(__file__).resolve().parent / "schema_pg.sql"
+
+
+def is_postgres_url(url: str | None) -> bool:
+    """Checks whether a database URL points to a PostgreSQL database."""
+    if not url:
+        return False
+    clean_url = url.strip().lower()
+    return clean_url.startswith("postgresql://") or clean_url.startswith("postgres://")
+
+
+def get_database_url() -> str | None:
+    """Retrieves the active DATABASE_URL if configured in environment or app config."""
+    db_url = None
+    if current_app:
+        db_url = current_app.config.get("DATABASE_URL")
+    if not db_url:
+        db_url = os.environ.get("DATABASE_URL")
+    return db_url.strip() if db_url else None
 
 
 def get_db_path(custom_path=None):
@@ -35,15 +69,274 @@ def get_db_path(custom_path=None):
     return db_path
 
 
+def _translate_sql_params_for_postgres(sql: str) -> str:
+    """
+    Carefully replaces '?' parameter markers with '%s' format specifiers for PostgreSQL,
+    ignoring '?' characters that appear inside single-quoted string literals, double-quoted
+    identifiers, or line/block comments.
+    """
+    parts = []
+    i = 0
+    n = len(sql)
+    while i < n:
+        c = sql[i]
+        # Single-quoted string literal (with '' escape handling)
+        if c == "'":
+            end = i + 1
+            while end < n:
+                if sql[end] == "'":
+                    if end + 1 < n and sql[end + 1] == "'":
+                        end += 2
+                    else:
+                        end += 1
+                        break
+                else:
+                    end += 1
+            parts.append(sql[i:end])
+            i = end
+        # Double-quoted identifier
+        elif c == '"':
+            end = i + 1
+            while end < n and sql[end] != '"':
+                end += 1
+            if end < n:
+                end += 1
+            parts.append(sql[i:end])
+            i = end
+        # Single-line comment (-- ...)
+        elif c == '-' and i + 1 < n and sql[i + 1] == '-':
+            end = sql.find('\n', i)
+            if end == -1:
+                end = n
+            parts.append(sql[i:end])
+            i = end
+        # Parameter marker
+        elif c == '?':
+            parts.append('%s')
+            i += 1
+        else:
+            parts.append(c)
+            i += 1
+    return "".join(parts)
+
+
+class PostgresRow:
+    """
+    A dict-like and indexable row representation mirroring sqlite3.Row.
+    Allows accessing fields by case-insensitive column name or index.
+    """
+    def __init__(self, description, values):
+        self._values = list(values)
+        self._col_names = [col[0] for col in description] if description else []
+        self._col_map = {name.lower(): idx for idx, name in enumerate(self._col_names)}
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self._values[key]
+        if isinstance(key, str):
+            idx = self._col_map.get(key.lower())
+            if idx is not None:
+                return self._values[idx]
+        raise KeyError(f"Column '{key}' not found in row.")
+
+    def __iter__(self):
+        return iter(self._values)
+
+    def __len__(self):
+        return len(self._values)
+
+    def keys(self):
+        return list(self._col_names)
+
+    def values(self):
+        return list(self._values)
+
+    def items(self):
+        return list(zip(self._col_names, self._values))
+
+    def get(self, key, default=None):
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def __repr__(self):
+        return f"<PostgresRow {dict(self.items())}>"
+
+
+class PostgresCursorAdapter:
+    """
+    Cursor adapter wrapping a DB-API cursor (psycopg2 or pg8000).
+    Provides:
+    - Automatic translation of '?' to '%s'
+    - cursor.lastrowid support for INSERT statements (via RETURNING id)
+    - sqlite3.Row-compatible row fetching
+    """
+    def __init__(self, raw_cursor, is_pg8000=False):
+        self._raw_cursor = raw_cursor
+        self._is_pg8000 = is_pg8000
+        self.lastrowid = None
+        self._pending_id_capture = False
+
+    def __getattr__(self, name):
+        return getattr(self._raw_cursor, name)
+
+    @property
+    def description(self):
+        return self._raw_cursor.description
+
+    @property
+    def rowcount(self):
+        return self._raw_cursor.rowcount
+
+    def execute(self, sql, params=None):
+        self.lastrowid = None
+        self._pending_id_capture = False
+        translated_sql = _translate_sql_params_for_postgres(sql)
+
+        # Check if this is an INSERT statement needing primary key capture for cursor.lastrowid
+        stripped = translated_sql.strip()
+        is_insert = re.match(r"^INSERT\s+INTO\b", stripped, re.IGNORECASE) is not None
+        has_returning = re.search(r"\bRETURNING\b", stripped, re.IGNORECASE) is not None
+
+        if is_insert and not has_returning:
+            translated_sql = f"{translated_sql} RETURNING id"
+            self._pending_id_capture = True
+
+        if params is not None:
+            if isinstance(params, list):
+                params = tuple(params)
+            self._raw_cursor.execute(translated_sql, params)
+        else:
+            self._raw_cursor.execute(translated_sql)
+
+        if self._pending_id_capture:
+            # Capture generated ID from RETURNING id
+            res = self._raw_cursor.fetchone()
+            if res:
+                self.lastrowid = res[0]
+            self._pending_id_capture = False
+
+        return self
+
+    def executemany(self, sql, seq_of_params):
+        translated_sql = _translate_sql_params_for_postgres(sql)
+        return self._raw_cursor.executemany(translated_sql, seq_of_params)
+
+    def fetchone(self):
+        row = self._raw_cursor.fetchone()
+        if row is None:
+            return None
+        return PostgresRow(self._raw_cursor.description, row)
+
+    def fetchall(self):
+        rows = self._raw_cursor.fetchall()
+        desc = self._raw_cursor.description
+        return [PostgresRow(desc, r) for r in rows]
+
+    def fetchmany(self, size=None):
+        rows = self._raw_cursor.fetchmany(size) if size is not None else self._raw_cursor.fetchmany()
+        desc = self._raw_cursor.description
+        return [PostgresRow(desc, r) for r in rows]
+
+    def close(self):
+        return self._raw_cursor.close()
+
+
+class PostgresConnectionAdapter:
+    """
+    Connection adapter wrapping a PostgreSQL connection (psycopg2 or pg8000).
+    Provides execute(), cursor(), commit(), rollback(), close() with standard interface.
+    """
+    def __init__(self, raw_conn, is_pg8000=False):
+        self._raw_conn = raw_conn
+        self._is_pg8000 = is_pg8000
+
+    def cursor(self):
+        raw_cur = self._raw_conn.cursor()
+        return PostgresCursorAdapter(raw_cur, is_pg8000=self._is_pg8000)
+
+    def execute(self, sql, params=None):
+        """Allows direct execution on connection: conn.execute(...)"""
+        cur = self.cursor()
+        return cur.execute(sql, params)
+
+    def commit(self):
+        return self._raw_conn.commit()
+
+    def rollback(self):
+        return self._raw_conn.rollback()
+
+    def close(self):
+        return self._raw_conn.close()
+
+
+def connect_postgres(url: str):
+    """
+    Establishes a connection to PostgreSQL using psycopg2 if available, or pg8000 as fallback.
+    Handles Render URL prefix 'postgres://' by standardizing to 'postgresql://'.
+    """
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://"):]
+
+    # 1. Try psycopg2 if available
+    if psycopg2 is not None:
+        try:
+            conn = psycopg2.connect(url)
+            return PostgresConnectionAdapter(conn, is_pg8000=False)
+        except Exception:
+            # Fall back to pg8000 if psycopg2 has runtime/DLL issues
+            pass
+
+    # 2. Try pg8000
+    if pg8000_dbapi is not None:
+        parsed = urllib.parse.urlparse(url)
+        query_params = urllib.parse.parse_qs(parsed.query)
+
+        user = parsed.username or "postgres"
+        password = parsed.password or ""
+        host = parsed.hostname or "localhost"
+        port = parsed.port or 5432
+        database = parsed.path.lstrip("/") or "postgres"
+
+        ssl_context = True if query_params.get("sslmode", [""])[0] in ("require", "verify-ca", "verify-full") else None
+
+        conn = pg8000_dbapi.connect(
+            user=user,
+            password=password,
+            host=host,
+            port=port,
+            database=database,
+            ssl_context=ssl_context
+        )
+        return PostgresConnectionAdapter(conn, is_pg8000=True)
+
+    raise RuntimeError(
+        "PostgreSQL connection requested via DATABASE_URL, but neither psycopg2 nor pg8000 is available."
+    )
+
+
 def get_db_connection(db_path=None):
     """
-    Opens and returns a SQLite database connection.
+    Opens and returns a database connection.
+    - If DATABASE_URL is set and points to Postgres, connects to PostgreSQL.
+    - Otherwise (default), connects to SQLite at db_path or instance/planner.db.
     Enables foreign keys and row factory for dict-like row access.
     Within a Flask request context, reuses g.db to avoid duplicate connections.
     """
+    db_url = get_database_url()
+
+    # Route 1: PostgreSQL Connection
+    if is_postgres_url(db_url):
+        if current_app:
+            if "db" not in g:
+                g.db = connect_postgres(db_url)
+            return g.db
+        return connect_postgres(db_url)
+
+    # Route 2: SQLite Connection (Default)
     target_path = get_db_path(db_path)
 
-    # If within Flask request context, cache in `g`
     if current_app:
         if "db" not in g:
             conn = sqlite3.connect(target_path)
@@ -52,7 +345,6 @@ def get_db_connection(db_path=None):
             g.db = conn
         return g.db
 
-    # Standalone connection (outside Flask request context, e.g. tests/scripts)
     conn = sqlite3.connect(target_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
@@ -69,9 +361,13 @@ def close_db_connection(e=None):
 def migrate_db_schema(conn):
     """
     Safe, idempotent schema migration to preserve existing user data when upgrading
-    from single-tenant to multi-tenant authenticated schema.
+    from single-tenant to multi-tenant authenticated schema on SQLite.
     Checks table structures and adds or relaxes user_id columns without losing data.
     """
+    # Only run SQLite-specific table inspection on SQLite connections
+    if not isinstance(conn, sqlite3.Connection):
+        return
+
     cursor = conn.cursor()
 
     # 1. Ensure users table exists
@@ -204,7 +500,6 @@ def migrate_db_schema(conn):
             cursor.execute("PRAGMA foreign_keys = ON;")
 
     # 5. Check if there are legacy records and a primary registered user exists
-    # Migrate legacy local data to the primary registered student to preserve their historical data
     cursor.execute("SELECT id FROM users ORDER BY id ASC LIMIT 1")
     first_user = cursor.fetchone()
     if first_user and first_user[0] is not None:
@@ -212,17 +507,14 @@ def migrate_db_schema(conn):
         cursor.execute("UPDATE subjects SET user_id = ? WHERE user_id IS NULL", (primary_user_id,))
         cursor.execute("UPDATE study_plans SET user_id = ? WHERE user_id IS NULL", (primary_user_id,))
 
-        # Inspect if primary user already has an active study_preferences row
         cursor.execute("SELECT id FROM study_preferences WHERE user_id = ?", (primary_user_id,))
         user_pref_exists = cursor.fetchone()
 
-        # Find any unassigned legacy preferences row
         cursor.execute("SELECT * FROM study_preferences WHERE user_id IS NULL ORDER BY id ASC LIMIT 1")
         legacy_pref = cursor.fetchone()
 
         if legacy_pref:
             if user_pref_exists:
-                # Primary user already has a row; sync custom values from legacy row without violating uniqueness
                 cursor.execute(
                     """
                     UPDATE study_preferences 
@@ -232,7 +524,6 @@ def migrate_db_schema(conn):
                     (legacy_pref["daily_available_hours"], legacy_pref["preferred_time_of_day"], legacy_pref["focus_span_minutes"], legacy_pref["fatigue_level"], primary_user_id)
                 )
             else:
-                # Primary user does not have a preferences row yet; assign ownership of the legacy row
                 cursor.execute(
                     "UPDATE study_preferences SET user_id = ? WHERE id = ?",
                     (primary_user_id, legacy_pref["id"])
@@ -243,29 +534,57 @@ def migrate_db_schema(conn):
 
 def init_db(app=None, db_path=None):
     """
-    Initializes SQLite tables using schema.sql, migrates existing tables safely,
-    and seeds default preferences if missing.
-    Can be called directly or with a Flask app instance.
+    Initializes database tables using the appropriate schema (schema.sql for SQLite,
+    schema_pg.sql for PostgreSQL), executes migrations safely, and seeds default preferences.
     """
-    target_path = get_db_path(db_path)
+    db_url = get_database_url()
 
-    # Use a direct connection to ensure schema execution
+    # Route 1: PostgreSQL Initialization
+    if is_postgres_url(db_url):
+        conn = connect_postgres(db_url)
+        try:
+            if SCHEMA_PG_FILE_PATH.exists():
+                with open(SCHEMA_PG_FILE_PATH, "r", encoding="utf-8") as f:
+                    schema_sql = f.read()
+                # Execute individual DDL statements safely
+                statements = [stmt.strip() for stmt in schema_sql.split(";") if stmt.strip()]
+                for stmt in statements:
+                    conn.execute(stmt)
+                conn.commit()
+
+            # Seed global default student preferences (user_id IS NULL) if none exist
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) AS count FROM study_preferences WHERE user_id IS NULL")
+            row = cur.fetchone()
+            if row and row["count"] == 0:
+                conn.execute(
+                    """
+                    INSERT INTO study_preferences 
+                    (user_id, daily_available_hours, preferred_time_of_day, focus_span_minutes, fatigue_level)
+                    VALUES (NULL, ?, ?, ?, ?)
+                    """,
+                    (4.0, "morning", 45, "medium")
+                )
+                conn.commit()
+        finally:
+            conn.close()
+        return
+
+    # Route 2: SQLite Initialization (Default)
+    target_path = get_db_path(db_path)
     conn = sqlite3.connect(target_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
 
     try:
-        # First apply safe migration if tables already exist
         migrate_db_schema(conn)
 
         with open(SCHEMA_FILE_PATH, "r", encoding="utf-8") as f:
             schema_sql = f.read()
         conn.executescript(schema_sql)
 
-        # Re-run migration check to ensure all columns exist
         migrate_db_schema(conn)
 
-        # Seed global default student preferences (user_id IS NULL) if none exist
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) AS count FROM study_preferences WHERE user_id IS NULL")
         row = cursor.fetchone()
@@ -294,7 +613,6 @@ def load_sample_subjects(db_path=None, user_id=None):
 
     today = datetime.now().date()
 
-    # Pre-defined realistic college subjects with dynamically calculated upcoming exam dates
     sample_data = [
         {
             "name": "Data Structures & Algorithms",
@@ -375,7 +693,6 @@ def load_sample_subjects(db_path=None, user_id=None):
 
     conn.commit()
 
-    # Close if outside request context
     if not current_app:
         conn.close()
 
